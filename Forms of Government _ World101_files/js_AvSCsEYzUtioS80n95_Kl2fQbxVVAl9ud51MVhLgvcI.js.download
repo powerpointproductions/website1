@@ -1,0 +1,530 @@
+(function ($, Drupal) {
+
+  Drupal.behaviors.dd_social_share = {
+    attach: function (context, drupalSettings) {
+
+      var Config = {
+        FACEBOOK_APP_ID : drupalSettings.social.FACEBOOK_APP_ID,
+        FACEBOOK_DEFAULT_CAPTION : drupalSettings.social.FACEBOOK_DEFAULT_CAPTION,
+        TWITTER_USERNAME : drupalSettings.social.TWITTER_USERNAME,
+        BITLY_USERNAME : drupalSettings.social.BITLY_USERNAME,
+        BITLY_API_KEY : drupalSettings.social.BITLY_API_KEY,
+        BITLY_BEARER_TOKEN : drupalSettings.social.BITLY_BEARER_TOKEN,
+        BITLY_GROUP_GUID : drupalSettings.social.BITLY_GROUP_GUID,
+      };
+
+      window.social_share = window.social_share || {}
+      window.social_share.Config = Config;
+    }
+}
+})(jQuery,Drupal);
+;
+(function ($) {
+
+  function email(input) {
+    var re = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+    return re.test(input);
+  }
+
+  function activateShare(eventType, parentSelector) {
+    $('.share-button').on(eventType, function() {
+      $(this).closest(parentSelector).toggleClass('share-opened');
+    });
+  }
+
+  function padNumber(number, padWidth, characterPad) {
+    // [FS] Source: http://stackoverflow.com/a/10073788
+    var number = number + '';
+    var characterPad = characterPad || '0';
+    var padWidth = padWidth || 2;
+    return number.length >= padWidth ? number : new Array(padWidth - number.length + 1).join(characterPad) + number;
+  }
+
+  // Prevents fixed overlays elements from scrolling the body
+  function removeIOSRubberEffect( element ) {
+
+    // Prevents addEventListener errors when empty elements are passed.
+    if (!element) {
+      return;
+    }
+
+    element.addEventListener( "touchstart", function () {
+
+        var top = element.scrollTop, totalScroll = element.scrollHeight, currentScroll = top + element.offsetHeight;
+
+        if (top === 0 ) {
+            element.scrollTop = 1;
+        } else if (currentScroll === totalScroll ) {
+            element.scrollTop = top - 1;
+        }
+
+    } );
+  }
+
+  // Get URL parameters by name
+  function getParameterByName(name, url) {
+    if (!url) {
+      url = window.location.href;
+    }
+    name = name.replace(/[\[\]]/g, "\\$&");
+    var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
+        results = regex.exec(url);
+    if (!results) return null;
+    if (!results[2]) return '';
+    return decodeURIComponent(results[2].replace(/\+/g, " "));
+  }
+
+  function getWindowSelection() {
+    if (window.getSelection) {
+      var selection = window.getSelection();
+
+      if (selection.getRangeAt && selection.rangeCount) {
+        var selectedText = selection.getRangeAt(0).toString();
+        var trimmedText = _.trim(selectedText);
+
+        return trimmedText;
+      }
+
+      return null;
+    }
+
+    if (document.selection && document.selection.createRange) {
+      return document.selection.createRange();
+    }
+
+    return null;
+  }
+
+  function getCookie(cname) {
+    var name = cname + "=";
+    var ca = document.cookie.split(';');
+    for(var i = 0; i < ca.length; i++) {
+        var c = ca[i];
+        while (c.charAt(0) == ' ') {
+            c = c.substring(1);
+        }
+        if (c.indexOf(name) == 0) {
+            return c.substring(name.length, c.length);
+        }
+    }
+    return "";
+  }
+
+  function getShortenedURL(url, callback) {
+    $.ajax({
+      type: 'POST',
+      url: 'https://api-ssl.bitly.com/v4/shorten',
+      cache: 'true',
+      data: JSON.stringify({group_guid: social_share.Config.BITLY_GROUP_GUID, long_url: url}),
+      dataType: 'json',
+      contentType: 'application/json',
+      headers: {
+        'Authorization': `Bearer ${social_share.Config.BITLY_BEARER_TOKEN}`,
+      },
+    }).done(resp => {
+      callback(resp.link);
+    });
+  }
+  
+  // COMMON Exposed methods
+  var Utils = {
+    email: email,
+    activateShare: activateShare,
+    padNumber: padNumber,
+    removeIOSRubberEffect: removeIOSRubberEffect,
+    getParameterByName: getParameterByName,
+    getWindowSelection: getWindowSelection,
+    getCookie: getCookie,
+    getShortenedURL: getShortenedURL,
+  };
+
+  window.social_share = window.social_share || {}
+  window.social_share.Utils = Utils;
+
+})(jQuery);
+
+/* From Modernizr */
+function whichTransitionEvent(){
+    var t;
+    var el = document.createElement('fakeelement');
+    var transitions = {
+      'transition':'transitionend',
+      'OTransition':'oTransitionEnd',
+      'MozTransition':'transitionend',
+      'WebkitTransition':'webkitTransitionEnd'
+    }
+
+    for(t in transitions){
+        if (el.style[t] !== undefined ){
+            return transitions[t];
+        }
+    }
+}
+;
+(function ($) {
+
+  $('.share-kit__hotspot').keyup(function(event){
+    if (event.keyCode === 13 || event.keyCode === 32) {
+      $(this).click();
+    }
+  })
+
+  function valueOrEmptyString(value) {
+    return value || '';
+  }
+
+  function getLocationMetadata($shareKit, query) {
+    var location = getIframeLocation(query);
+    var notIframe = _.isEmpty(location);
+
+    if (notIframe) {
+      location = `${window.location.protocol}//${window.location.hostname}${window.location.pathname}?${query}`;
+    }
+
+    if ($shareKit.data('share-anchor') && notIframe) {
+      location = `${location}#${$shareKit.data('share-anchor')}`;
+    }
+
+    if ($shareKit.data('share-query') && notIframe) {
+      location = `${location}?${$shareKit.data('share-query')}`;
+    }
+
+    return location;
+  }
+
+  function shareMetadataFor(self, source) {
+
+    var $shareKit;
+    var utm_source = '';
+    var query = '';
+
+    switch(source) {
+      case 'facebook':
+        utm_source = 'fb';
+      break;
+      case 'twitter':
+        utm_source = 'tw';
+      break;
+      case 'linkedin':
+        utm_source = 'li';
+      break;
+      case 'email':
+        utm_source = 'emailfwd';
+      break;
+    }
+
+    query = $.param([
+      { name: 'utm_medium', value: 'social_share' },
+      { name: 'utm_source', value: utm_source }
+    ]);
+
+    if ($(self).parents('.share-kit').hasClass('share-kit--chapters')) {
+      $shareKit = $('.immersive-intro .share-kit');
+    }
+    else if (($(self).parents('.main-nav').length === 1) && ($(self).parents('.main-nav')[0].getAttribute("class").indexOf("election-2020") === -1)) {
+      if ($('.cfr-transported-content--current').find('.article-header .share-kit').length >= 1) {
+        $shareKit = $('.cfr-transported-content--current').find('.article-header .share-kit');
+      }
+      else if ($('.article-header-backgrounder .share-kit').length >= 1) {
+        $shareKit = $('.article-header-backgrounder .share-kit');
+      }
+      else {
+        $shareKit = $('.article-header .share-kit');
+      }
+    }
+    else if ($('.header-base__section-bottom').find('.share-kit').length >= 1) {
+      $shareKit = $('.header-base__section-bottom').find('.share-kit');
+    }
+    else {
+      $shareKit = $(self).parents('.share-kit');
+    }
+
+    var location = getLocationMetadata($shareKit, query);
+    var location_encoded = encodeURIComponent(location);
+
+    var name = $shareKit.data('share-name');
+    var description = $shareKit.data('share-description');
+    var caption = $shareKit.data('share-caption');
+    var picture = $shareKit.data('share-picture');
+    var shareType = $shareKit.data('share-type');
+    var authors = $shareKit.data('share-authors');
+
+    if (caption === ''){
+      caption = social_share.Config.FACEBOOK_DEFAULT_CAPTION;
+    }
+
+    if (description === '::PageTitle::') {
+      description = $('h1').text();
+    }
+
+    return {
+      location: valueOrEmptyString(location),
+      location_encoded: valueOrEmptyString(location_encoded),
+      name: valueOrEmptyString(name),
+      description: valueOrEmptyString(description),
+      caption: valueOrEmptyString(caption),
+      picture: valueOrEmptyString(picture),
+      shareType: valueOrEmptyString(shareType),
+      authors: valueOrEmptyString(authors),
+    };
+  }
+
+  function shareWindowOpen(media, metadata) {
+
+    var obj = {};
+
+    obj.name = `${media.replace(/\b\w/g, l => l.toUpperCase())} Window`;
+
+    // [DM]NOTE: Popup blockers will typically only allow window.open
+    // if used during the processing of a user event (like a click).
+    // In our case, we're calling window.open later, not during the event,
+    // because twitter is using social_share.Utils.getShortenedURL which uses $.getJSON
+    // The Fix is to open the window as soon as click happens,
+    // and re-direct the pop-up to the proper URL
+    var shareWindow = window.open( drupalSettings.social.POPUP_URL, obj.name, shareWindowSpecs() );
+
+    switch(media){
+      case 'facebook' :
+        obj.url = `https://www.facebook.com/share.php?u=${metadata.location_encoded}`;
+        shareWindow.location.href = obj.url;
+      break;
+      case 'twitter' :
+          social_share.Utils.getShortenedURL( metadata.location, function(shortURL){
+            var tweet = '';
+            var tweetParameters = {
+              text : metadata.name,
+              url : shortURL,
+              via : social_share.Config.TWITTER_USERNAME
+            };
+            var tweetParametersArray = [];
+
+            if (metadata.shareType !== 'article' && metadata.description.length){
+              tweetParameters.text = metadata.description;
+            }
+
+            tweetParametersArray = $.map(tweetParameters, function(value, _key){
+              return value;
+            });
+
+            tweetParametersArray[2] = 'via @' + tweetParametersArray[2];
+            tweet = tweetParametersArray.join(' ');
+
+            if (tweet.length > 280) {
+              var tweetParametersTemp = [];
+              var indexStart = 0;
+              var indexEnd = 0;
+
+              tweetParametersTemp = tweetParametersArray.slice(0);
+              tweetParametersTemp = tweetParametersTemp.splice(1,2);
+
+              indexEnd = 280;
+              indexEnd = 280 - tweetParametersTemp.join(' ').length - 1 - 3;
+
+              tweetParameters.text = tweetParametersArray[0].substring(indexStart, indexEnd) + '...';
+
+              tweetParametersArray = $.map(tweetParameters, function(value, _key){
+                return value;
+              });
+
+              tweet = tweetParametersArray.join(' ');
+            }
+
+            obj.url = 'https://twitter.com/share?' + $.param( tweetParameters );
+            shareWindow.location.href = obj.url;
+          } );
+        return;
+      break;
+      case 'linkedin' :
+        obj.url = `https://www.linkedin.com/shareArticle?mini=true&url=${metadata.location_encoded}&title=${encodeURIComponent(metadata.name)}&summary=${encodeURIComponent(metadata.description)}&source=CFR`;
+        shareWindow.location.href = obj.url;
+      break;
+      case 'email' :
+        obj.url = opt.location;
+        shareWindow.location.href = obj.url;
+      break;
+      case 'tumblr' :
+        obj.url = `https://www.tumblr.com/share/link?url=${metadata.location_encoded}`;
+        shareWindow.location.href = obj.url;
+      break;
+    }
+
+  }
+
+  function getIframeLocation(query) {
+    var isInIframe = (parent !== window);
+    var parentUrl = null;
+
+    if (isInIframe) {
+      var anchor = social_share.Utils.getParameterByName('anchor');
+      parentUrl =  `${parent.location.protocol}//${parent.location.hostname}${parent.location.pathname}?${query}#${anchor}?modal=true`;
+    }
+
+    return parentUrl;
+  }
+
+  function shareWindowSpecs() {
+    // body...
+    return 'height=400, width=540, top='+ ((window.innerHeight - 400) / 2) +', left='+ ((window.innerWidth  - 540)  / 2) +', toolbar=0, location=0, menubar=0, directories=0, scrollbars=0';
+  }
+
+  function shareViafacebook(self) {
+    dataLayer.push({'event': 'facebook_share'});
+    var metadata = shareMetadataFor(self, 'facebook');
+
+    if (metadata.shareType === 'pullquote'){
+      metadata.name = $('.article-header .share-kit').data('share-name');
+    }
+
+    FB.ui({
+      method: 'feed',
+      link: metadata.location,
+      picture: metadata.picture,
+      name: metadata.name,
+      description: metadata.description,
+      caption: metadata.caption
+    });
+  }
+
+  function shareViaTwitter(self) {
+    dataLayer.push({'event': 'twitter_share'});
+    var metadata = shareMetadataFor(self, 'twitter');
+    shareWindowOpen('twitter', metadata);
+  }
+
+  function shareViaLinkedin(self) {
+    dataLayer.push({'event': 'linkedin_share'});
+    var metadata = shareMetadataFor(self, 'linkedin');
+    shareWindowOpen('linkedin', metadata);
+  }
+
+  function shareViaEmail(self) {
+    dataLayer.push({'event': 'email_share'});
+    var metadata = shareMetadataFor(self, 'email');
+    var subject = metadata.name || $('head title').text();
+    var body = [];
+
+    if (metadata.description){
+      body.push(metadata.description);
+    }
+
+    if (metadata.location){
+      body.push(metadata.location);
+    }
+
+    body = body.join( '\n' );
+
+    window.location.href = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  }
+
+  function shareViaPrint() {
+    dataLayer.push({'event': 'print_option'});
+    window.print();
+  }
+
+  function shareViaPrintJs(self, url) {
+    function restoreButton() {
+      $(self)
+        .attr('disabled', false)
+        .removeClass('loading');
+    }
+
+    $(self).attr('disabled', true).addClass('loading');
+
+    printJS({
+      printable: url,
+      onLoadingEnd: restoreButton,
+      onError: restoreButton,
+      onPrintDialogClose: restoreButton,
+    });
+  }
+
+  var Share = {
+    facebook: shareViafacebook,
+    twitter: shareViaTwitter,
+    linkedin: shareViaLinkedin,
+    email: shareViaEmail,
+    print: shareViaPrint,
+    printJs: shareViaPrintJs
+  }
+
+  window.social_share = window.social_share || {}
+  window.social_share.Share = Share;
+
+})(jQuery);
+
+
+//------ Initialize Facebook App SDK
+window.fbAsyncInit = function() {
+    FB.init({
+      appId : social_share.Config.FACEBOOK_APP_ID,
+      xfbml : true,
+      version : 'v2.7'
+    });
+};
+
+(function(d, s, id){
+   var js, fjs = d.getElementsByTagName(s)[0];
+   if (d.getElementById(id)) {return;}
+   js = d.createElement(s); js.id = id;
+   js.src = "//connect.facebook.net/en_US/sdk.js";
+   js.async = true;
+   js.defer = true;
+   fjs.parentNode.insertBefore(js, fjs);
+ }(document, 'script', 'facebook-jssdk'));
+;
+(function ($, Drupal) {
+  Drupal.behaviors.share_kit = {
+    attach: function (context, _drupalSettings) {
+      $('.share-kit__collapse-btn', context).click(function () {
+        $(this).parents('.share-kit').toggleClass('share-kit--collapsed-open');
+        $(this).attr('aria-expanded', $(this).attr('aria-expanded') === "false");
+      });
+    }
+  }
+})(jQuery,Drupal);
+;
+/**
+  * @file
+  * Attach behaviors for a CFR component.
+  */
+
+(function ($) {
+  'use strict';
+
+  /**
+   * Setup and attach the CFR component.
+   *
+   * @type {Drupal~behavior}
+   */
+  Drupal.behaviors.sidenav = {
+    attach: function (context, settings) {
+      "use strict";var context=context||document;function init(){$('.sidenav-modal',context).ready(function(){var currentPath=$(location).attr('pathname').split('/')[1];var activeAnchor=$('.sidenav-modal').find('a[href="/'+currentPath+'"]');activeAnchor.closest('li').addClass('active');activeAnchor.addClass('active');});}
+if(typeof init == 'function') { init(); }
+
+    }
+  };
+})(jQuery);
+;
+/**
+  * @file
+  * Attach behaviors for a CFR component.
+  */
+
+(function ($) {
+  'use strict';
+
+  /**
+   * Setup and attach the CFR component.
+   *
+   * @type {Drupal~behavior}
+   */
+  Drupal.behaviors.modalToutForms = {
+    attach: function (context, settings) {
+      "use strict";var context=context||document;function init(){var $registerFormButton=$('.create-account-link');var $requestPassFormBtn=$('.request-password-link');var $forgotRequestPassFormBtn=$('.forgot-request-password-link');var CLASS_FORM_ITEM='form-item';$registerFormButton.addClass('modal-tout__form-btn').data('modal-id','#register-modal');$requestPassFormBtn.addClass('modal-tout__form-btn').data('modal-id','#new-pass-modal');$forgotRequestPassFormBtn.addClass('modal-tout__form-btn').data('modal-id','#new-pass-modal');$(document).ready(function(){$(".modal-tout-form .".concat(CLASS_FORM_ITEM,":not(.js-form-type-select)"),context).on('click ready load blur change',function(){var $label=$(this).find('label');var $input=$(this).find('input');if($input.attr('type')!=='checkbox'&&$label.hasClass('active')){return false;}$label.addClass('active');$input.focus();});$(".modal-tout-form .".concat(CLASS_FORM_ITEM," input"),context).on('blur change',function(){if($(this).val()){$(this).siblings('label').addClass('active');}});$(".modal-tout-form .".concat(CLASS_FORM_ITEM," input"),context).on('focusout',function(){if(!$(this).val()){$(this).siblings('label').removeClass('active');}});$(".modal-tout-form .".concat(CLASS_FORM_ITEM," input"),context).on('keydown',function(event){var keyCode=event.keyCode||event.which;if(keyCode===9){var $next=$(this).parent().next();var $label=$next.find('label');$label.addClass('active');}});$('.form-select option[value="_none"]').html('');$('.modal-tout-form .form-select').change(function(){if($(this).val()!=='_none'){$(this).closest('.form-item').find('label').hide();}else{$(this).closest('.form-item').find('label').show();}});$('.modal-tout__form-btn').off('click.namespace').on('click.namespace',function(event){event.preventDefault();var modalId=$(this).data('modal-id');$('.modal-tout-form').fadeOut(500);$('.modal-tout-form .messages').remove();$('body, html').addClass('no-scroll');$(modalId).fadeIn(500,function(){$(this).find('.modal-tout-form__close').click(function(){$('body, html').removeClass('no-scroll');$('.modal-tout-form .messages').remove();$('.modal-tout-form').fadeOut(500);});});// Prevents content main nav and inner container from scrolling body content
+if(bouncefix){bouncefix.add('modal-tout-form--pop-up');}$(window).click(function(event){if(event.target===$(modalId)[0]){$('body, html').removeClass('no-scroll');$('.modal-tout-form .messages').remove();$('.modal-tout-form').fadeOut(500);}});});$('.modal-tout-form input').filter(function(){return this.value!=='';}).change();});}
+if(typeof init == 'function') { init(); }
+
+    }
+  };
+})(jQuery);
+;
